@@ -150,9 +150,10 @@ if __name__ == "__main__":
         print("\nSpanish Translation:\n\n", esSub,'\n')
         print("\nEnglish Translation:\n\n", engSub,'\n')
         print(30*'-','\n')
-        #time.sleep(4)
+        time.sleep(4)
 
+#add a way to watch whole video
 #log accuracy
 #give a save/quit option
-#remove css <> tags
-
+#remove css <> tags from subs
+#easy way to select video and subtitle files
