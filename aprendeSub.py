@@ -1,5 +1,3 @@
-
-#!/home/geoff/miniconda3/bin/python
 from moviepy.editor import VideoFileClip
 from moviepy.tools import cvsecs
 import re, pygame, time
