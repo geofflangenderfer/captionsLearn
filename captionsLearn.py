@@ -116,11 +116,11 @@ def toFile(s, dest = None):
         print("Don't recognize structure of {}".format(f))
     
 if __name__ == "__main__":
-    video = VideoFileClip("/home/geoff/captionsLearn/lcdp/S01/La.Casa.de.Papel.S01E04.720p.NF.WEB-DL.x265-HETeam.mkv")
-    esSubs =file_to_subtitles( '/home/geoff/captionsLearn/esLcdpSubtitles/La.casa.de.papel.S01E04.WEBRip.Netflix.srt')
-    engSubs = file_to_subtitles('/home/geoff/captionsLearn/engLcdpSubtitles/Money.Heist.S01E04.XviD-AFG.srt')
-    esSubs, engSubs = cleanSubs(esSubs, engSubs)
-    master = sync(esSubs, engSubs)
+    video = VideoFileClip(/path/to/video)
+    sub1=file_to_subtitles(/path/to/sub1) 
+    sub2= file_to_subtitles(/path/to/sub2)
+    sub1, sub2= cleanSubs(sub1, sub2)
+    master = sync(sub1, sub2)
 
     #user sees clips with subtitles
     print(30*'-','\n')
