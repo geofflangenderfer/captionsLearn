@@ -56,43 +56,49 @@ def cleanSubs(s):
     return s 
 
 def sync(s1, s2):
-    """sync timestamps of both translations""" 
-    #the order of s1, s2 affects the returned value. Why?
 
-    #find the file with least entries
-    less  = min( (len(s2), s2), (len(s1), s1), key = lambda x: x[0] )[1]
-    more = max( (len(s2), s2), (len(s1), s1), key = lambda x: x[0] )[1]
+    thresh = lambda a,b: abs( (a-b) )
 
-    # x is abso% from y 
-    abso = lambda x,y: abs( (x-y)/y )
+    subs = [s1, s2]
+    less, more = sorted(subs, key = lambda x: len(x))
+
+    def entryBF(r):
+        """compare ts entries in other subfile by their difference. 
+        Return index and difference of other subfile closest to r """
+        diffsB = [ ( i, thresh( r[0][0], y[0][0] ) ) for i,y in enumerate(more) ]
+        diffsB.sort( key = lambda r: r[1] )
+        diffsE = [ ( i, thresh( r[0][1], y[0][1] ) ) for i,y in enumerate(more) ]
+        diffsE.sort( key = lambda r: r[1] )
+        minB = diffsB[0]
+        minE = diffsE[0]
+        
+        return minB, minE
 
     master = []
-    i =0 
-    for x in less:
-        while i < len(more):
-            y = more[i]
-            #check beg, end ts
-            xB=x[0][0]; xE=x[0][1]
-            yB=y[0][0]; yE=y[0][1]
-
-            if abs( (xB-yB) ) < .5 and abs( (xE-yE) ) < .5: 
-                master.append( (x[0], x[1], y[1]) )
-                i+=1
-                break
-
-            #merge subs to make a match
-            elif abs( (xB-yB) ) < .5 and abs( (xE-yE) ) > .5:    
-                z = i
-                while  abs( (xE-yE) ) > .5:
-                    y = more[z]; yE = y[0][1]
-                    z+=1
-                entry = ( x[0],  x[1],  "\n".join(x[1] for x in more[i:z+1]) )
-                master.append(entry)
-                i = z
-                break
+    for j, x in enumerate(less):
+        #best fit tsB and tsE
+        minB, minE = entryBF(x)
+        #append if both timestamps match or 
+        #try to create entry that creates a match
+        if minB[1] < .5:
+            if minE[1] < .5 and minB[0] == minE[0]:
+                master.append( ( x[0], x[1], more[ minB[0] ][1] ) ) 
             else:
-                i+=1
+                #an edge case occurs when x matches tsB, but matches the 
+                #following subs tsE. By merging the one that matches tsB with 
+                #that of tsE, we can create a match.
+                #assumes the subfile with more entries will be 
+                #combining entries
+                tsB, tsE  = x[0]
+                s1S = x[1]
+                s2S = more[ minB[0] ][1]+'\n' + more[ minB[0]+1 ][1]
+                z = ( [tsB, tsE], s1S, s2S )
+                minB, minE = entryBF(z)
+
+                if minE[1]+minB[1] < 1:
+                    master.append(z)
     return master
+
 
 def toFile(s, dest = None):
     if len(s[0]) == 3: 
@@ -183,7 +189,8 @@ def sendLogs():
     try:
         mailServer.login(USER, PW)
     except SMTPAuthenticationError:
-        print("try going to https://myaccount.google.com/lesssecureapps and turning less secure apps on. This allows the program to send emails through your gmail account")
+        print("try going to https://myaccount.google.com/lesssecureapps and \
+              turning less secure apps on. This allows the program to send emails through your gmail account")
         print("email geoffro2888@gmail.com if that doesn't work")
         raise
     mailServer.send_message(msg)
@@ -192,17 +199,17 @@ def sendLogs():
 
 if __name__ == "__main__":
     print(30*'-','\n')
-    #print("Welcome to captionsLearn. You will be shown clips with dialogue, then you will be asked to provide translations in both languages")
-    #Tk().withdraw()
-    #print("what video file do you want to use?")
-    #vidFile = askopenfilename()
-    #print("what's the first subtitle file to use?")
-    #sub1File = askopenfilename()
-    #print("what's the second subtitle file to use?")
-    #sub2File = askopenfilename()
-    vidFile = '/home/geoff/captionsLearn/lcdp/S01/La.Casa.de.Papel.S01E04.720p.NF.WEB-DL.x265-HETeam.mkv'
-    sub2File = '/home/geoff/captionsLearn/engLcdpSubtitles/Money.Heist.S01E04.XviD-AFG.srt'
-    sub1File = '/home/geoff/captionsLearn/esLcdpSubtitles/La.casa.de.papel.S01E04.WEBRip.Netflix.srt'
+
+    #prompt for files 
+    print("Welcome to captionsLearn. You will be shown clips with dialogue, then you will be asked to provide translations in both languages")
+    Tk().withdraw()
+    print("what video file do you want to use?")
+    vidFile = askopenfilename()
+    print("what's the first subtitle file to use?")
+    sub1File = askopenfilename()
+    print("what's the second subtitle file to use?")
+    sub2File = askopenfilename()
+
     video = VideoFileClip(vidFile)
     sub1, sub2 =cleanSubs( file_to_subtitles(sub1File) ), cleanSubs( file_to_subtitles(sub2File) )
     master = sync(sub1, sub2)
@@ -214,8 +221,7 @@ if __name__ == "__main__":
     file_handler = logging.FileHandler('data.log') 
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    #logging.basicConfig(filename = 'data.log', level = logging.DEBUG, format = '%(asctime)s:%(levelname)s:%(message)s')
-    #initialize data.log
+
     logger.info(30*'-'+'(start session)'+30*'-')
     logger.info("video file:{}".format(vidFile))
     logger.info("sub1 file:{}".format(sub1File))
@@ -227,7 +233,6 @@ if __name__ == "__main__":
         a,b = master[_][0]
         engSub = master[_][1]
         esSub = master[_][2]
-
         clip = video.subclip(a,b)
         clip.preview()
         pygame.quit()
@@ -244,13 +249,15 @@ if __name__ == "__main__":
                 pygame.quit()
             else:
                 check = 'yes' 
+
         #user inputs translations
         esT = input("What did they say in spanish? ")
         enT = input("What did they say in english? ")
         
         #time spent on each clip
         end = time.time() - start
-
+        
+        #log to data.log
         logger.info("clip Timestamp:[{0},{1}]".format(a,b))
         logger.info("Time spent on clip:{0:.2f}s".format(end))
         logger.info("replay clip {} times".format(i))
@@ -271,13 +278,5 @@ if __name__ == "__main__":
                 print("Ok, come back soon!")
                 sendLogs()
                 sys.exit(0)
-        #check whether user wants to review answer before moving on
-        #check2=''
-        #while check2 not in ['yes','y']:
-        #    wait= input('Continue? ').lower()
-        #    if wait in ['yes','y']:
-        #        check2 = 'yes' 
-        #    else:
-        #        time.sleep(4)
 
         print(30*'-','\n')

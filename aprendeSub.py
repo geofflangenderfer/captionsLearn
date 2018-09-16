@@ -1,3 +1,4 @@
+#!/home/geoff/miniconda3/bin/python
 from moviepy.editor import VideoFileClip
 from moviepy.tools import cvsecs
 import pygame
@@ -11,6 +12,7 @@ import smtplib, os
 from email.message import EmailMessage
 import datetime
 
+import pickle
 def file_to_subtitles(filename):
     """ convierte un .srt archivo en subtitulos
 
@@ -57,41 +59,47 @@ def cleanSubs(s):
 
 def sync(s1, s2):
     """coordinar timestamps para ambas traducciones""" 
-    #the order of s1, s2 affects the returned value. Why?
 
-    #find the file with least entries
-    less  = min( (len(s2), s2), (len(s1), s1), key = lambda x: x[0] )[1]
-    more = max( (len(s2), s2), (len(s1), s1), key = lambda x: x[0] )[1]
+    thresh = lambda a,b: abs( (a-b) )
 
-    # x is abso% from y 
-    abso = lambda x,y: abs( (x-y)/y )
+    subs = [s1, s2]
+    less, more = sorted(subs, key = lambda x: len(x))
+
+    def entryBF(r):
+        """compare ts entries in other subfile by their difference. 
+        Return index and difference of other subfile closest to r """
+        diffsB = [ ( i, thresh( r[0][0], y[0][0] ) ) for i,y in enumerate(more) ]
+        diffsB.sort( key = lambda r: r[1] )
+        diffsE = [ ( i, thresh( r[0][1], y[0][1] ) ) for i,y in enumerate(more) ]
+        diffsE.sort( key = lambda r: r[1] )
+        minB = diffsB[0]
+        minE = diffsE[0]
+        
+        return minB, minE
 
     master = []
-    i =0 
-    for x in less:
-        while i < len(more):
-            y = more[i]
-            #check beg, end ts
-            xB=x[0][0]; xE=x[0][1]
-            yB=y[0][0]; yE=y[0][1]
-
-            if abs( (xB-yB) ) < .5 and abs( (xE-yE) ) < .5: 
-                master.append( (x[0], x[1], y[1]) )
-                i+=1
-                break
-
-            #merge subs to make a match
-            elif abs( (xB-yB) ) < .5 and abs( (xE-yE) ) > .5:    
-                z = i
-                while  abs( (xE-yE) ) > .5:
-                    y = more[z]; yE = y[0][1]
-                    z+=1
-                entry = ( x[0],  x[1],  "\n".join(x[1] for x in more[i:z+1]) )
-                master.append(entry)
-                i = z
-                break
+    for j, x in enumerate(less):
+        #best fit tsB and tsE
+        minB, minE = entryBF(x)
+        #append if both timestamps match or 
+        #try to create entry that creates a match
+        if minB[1] < .5:
+            if minE[1] < .5 and minB[0] == minE[0]:
+                master.append( ( x[0], x[1], more[ minB[0] ][1] ) ) 
             else:
-                i+=1
+                #an edge case occurs when x matches tsB, but matches the 
+                #following subs tsE. By merging the one that matches tsB with 
+                #that of tsE, we can create a match.
+                #assumes the subfile with more entries will be 
+                #combining entries
+                tsB, tsE  = x[0]
+                s1S = x[1]
+                s2S = more[ minB[0] ][1]+'\n' + more[ minB[0]+1 ][1]
+                z = ( [tsB, tsE], s1S, s2S )
+                minB, minE = entryBF(z)
+
+                if minE[1]+minB[1] < 1:
+                    master.append(z)
     return master
 
 def toFile(s, dest = None):
@@ -138,8 +146,11 @@ def sendLogs():
         password = password.strip('\n')
             
     except:
-        print("leer desde credentials.txt no funciono, entonces vamos a hacerlo de nuevo ", sys.exc_info()[0])
-        print("\nTu correo electronico es usado para enviar archivos de registro, que incluye: tiempo para terminar un clip, traducciones, y respuestas ")
+        print("leer desde credentials.txt no funciono, \
+            entonces vamos a hacerlo de nuevo ", sys.exc_info()[0])
+        print("\nTu correo electronico es usado para enviar archivos de \
+            registro, que incluye: tiempo para terminar un clip, \
+            traducciones, y respuestas ")
         email = raw_input("Que es tu correo electronico? ")
         username = raw_input("Que es tu usuario? ")
         password = raw_input("Que es tu contrasena? ")
@@ -156,7 +167,8 @@ def sendLogs():
     if gmailRe.search(email): SERVER, PORT = 'smtp.gmail.com',587
     elif outlookRe.search(email): SERVER, PORT = 'smtp-mail.outlook.com',587 
     else:
-        print("No reconoce tu correo electronico. Envia la mensaje de error y la data.log archivo a geoffro2888@gmail.com para ayuda")
+        print("No reconoce tu correo electronico. Envia la mensaje de error y \
+            la data.log archivo a geoffro2888@gmail.com para ayuda")
 
     USER = username
     PW = password 
@@ -168,7 +180,8 @@ def sendLogs():
     with open(path, 'r') as f:
         msg = EmailMessage()
         msg.set_content(f.read())
-    msg['Subject'] = "captionsLearn: User-{} : Date-{}".format( os.getcwd(), datetime.datetime.today().strftime('%Y-%m-%d') )
+    msg['Subject'] = "captionsLearn: User-{} : Date-{}".format( 
+            os.getcwd(), datetime.datetime.today().strftime('%Y-%m-%d') )
     msg['From'] = FROM 
     msg['To'] = TO 
     open(path, 'w').close()
@@ -183,7 +196,9 @@ def sendLogs():
     try:
         mailServer.login(USER, PW)
     except SMTPAuthenticationError:
-        print("Intenta ir a https://myaccount.google.com/lesssecureapps y convirtiendo 'less secure apps' a 'on'. Esto permite la programa para enviar correos electronicos desde tu cuenta de gmail.")
+        print("Intenta ir a https://myaccount.google.com/lesssecureapps y \
+            convirtiendo 'less secure apps' a 'on'. Esto permite la programa \
+            para enviar correos electronicos desde tu cuenta de gmail.")
         print("Envia un mensaje a geoffro2888@gmail.com si lo no funciona")
         raise
     mailServer.send_message(msg)
@@ -192,7 +207,9 @@ def sendLogs():
 
 if __name__ == "__main__":
     print(30*'-','\n')
-    #print("Bienvenido a aprendeSub. Se te mostrara clips con dialogo, despues te pedira a dar traducciones en ambos linguajes")
+    #pedir por los archivos
+    #print("Bienvenido a aprendeSub. Se te mostrara clips con dialogo, \
+    #    \despues te pedira a dar traducciones en ambos linguajes")
     #Tk().withdraw()
     #print("Que archivo de video quieres usar?")
     #vidFile = askopenfilename()
@@ -201,21 +218,20 @@ if __name__ == "__main__":
     #print("Que es el segundo archivo de subtitulos para usar?")
     #sub2File = askopenfilename()
     vidFile = '/home/geoff/captionsLearn/lcdp/S01/La.Casa.de.Papel.S01E04.720p.NF.WEB-DL.x265-HETeam.mkv'
-    sub2File = '/home/geoff/captionsLearn/engLcdpSubtitles/Money.Heist.S01E04.XviD-AFG.srt'
-    sub1File = '/home/geoff/captionsLearn/esLcdpSubtitles/La.casa.de.papel.S01E04.WEBRip.Netflix.srt'
+    sub1File ='/home/geoff/captionsLearn/engLcdpSubtitles/Money.Heist.S01E04.XviD-AFG.srt'
+    sub2File = '/home/geoff/captionsLearn/esLcdpSubtitles/La.casa.de.papel.S01E04.WEBRip.Netflix.srt'
     video = VideoFileClip(vidFile)
     sub1, sub2 =cleanSubs( file_to_subtitles(sub1File) ), cleanSubs( file_to_subtitles(sub2File) )
     master = sync(sub1, sub2)
-    
-    #setup logging
+    pickle.dump(master, open('saveSubs.p','wb'))
+    #Empezar logging
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s:%(filename)s:%(message)s')
     file_handler = logging.FileHandler('data.log') 
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    #logging.basicConfig(filename = 'data.log', level = logging.DEBUG, format = '%(asctime)s:%(levelname)s:%(message)s')
-    #initialize data.log
+
     logger.info(30*'-'+'(start session)'+30*'-')
     logger.info("version:{}".format(os.getcwd()))
     logger.info("video file:{}".format(vidFile))
@@ -263,6 +279,7 @@ if __name__ == "__main__":
         print("\nTraduccion Espanol:\n\n", esSub,'\n')
         print("\nTraduccion Ingles:\n\n", engSub,'\n')
         
+        #check whether or not to quit
         check3=''
         while check3 not in ['si','s']:
             wait= input('Continua aprendiendo? ').lower()
@@ -272,13 +289,5 @@ if __name__ == "__main__":
                 print("Listo, regresa pronto!")
                 sendLogs()
                 sys.exit(0)
-        #check whether user wants to review answer before moving on
-        #check2=''
-        #while check2 not in ['yes','y']:
-        #    wait= input('Continue? ').lower()
-        #    if wait in ['yes','y']:
-        #        check2 = 'yes' 
-        #    else:
-        #        time.sleep(4)
 
         print(30*'-','\n')
