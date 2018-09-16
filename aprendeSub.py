@@ -11,7 +11,6 @@ import smtplib, os
 from email.message import EmailMessage
 import datetime
 
-import pickle
 def file_to_subtitles(filename):
     """ convierte un .srt archivo en subtitulos
 
@@ -145,11 +144,8 @@ def sendLogs():
         password = password.strip('\n')
             
     except:
-        print("leer desde credentials.txt no funciono, \
-            entonces vamos a hacerlo de nuevo ", sys.exc_info()[0])
-        print("\nTu correo electronico es usado para enviar archivos de \
-            registro, que incluye: tiempo para terminar un clip, \
-            traducciones, y respuestas ")
+        print("leer desde credentials.txt no funciono, entonces vamos a hacerlo de nuevo ", sys.exc_info()[0])
+        print("\nTu correo electronico es usado para enviar archivos de registro, que incluye: tiempo para terminar un clip, traducciones, y respuestas ")
         email = raw_input("Que es tu correo electronico? ")
         username = raw_input("Que es tu usuario? ")
         password = raw_input("Que es tu contrasena? ")
@@ -166,8 +162,7 @@ def sendLogs():
     if gmailRe.search(email): SERVER, PORT = 'smtp.gmail.com',587
     elif outlookRe.search(email): SERVER, PORT = 'smtp-mail.outlook.com',587 
     else:
-        print("No reconoce tu correo electronico. Envia la mensaje de error y \
-            la data.log archivo a geoffro2888@gmail.com para ayuda")
+        print("No reconoce tu correo electronico. Envia la mensaje de error y la data.log archivo a geoffro2888@gmail.com para ayuda")
 
     USER = username
     PW = password 
@@ -195,9 +190,7 @@ def sendLogs():
     try:
         mailServer.login(USER, PW)
     except SMTPAuthenticationError:
-        print("Intenta ir a https://myaccount.google.com/lesssecureapps y \
-            convirtiendo 'less secure apps' a 'on'. Esto permite la programa \
-            para enviar correos electronicos desde tu cuenta de gmail.")
+        print("Intenta ir a https://myaccount.google.com/lesssecureapps y convirtiendo 'less secure apps' a 'on'. Esto permite la programa para enviar correos electronicos desde tu cuenta de gmail.")
         print("Envia un mensaje a geoffro2888@gmail.com si lo no funciona")
         raise
     mailServer.send_message(msg)
@@ -206,23 +199,21 @@ def sendLogs():
 
 if __name__ == "__main__":
     print(30*'-','\n')
+
     #pedir por los archivos
-    #print("Bienvenido a aprendeSub. Se te mostrara clips con dialogo, \
-    #    \despues te pedira a dar traducciones en ambos linguajes")
-    #Tk().withdraw()
-    #print("Que archivo de video quieres usar?")
-    #vidFile = askopenfilename()
-    #print("Que es el primero archivo de subtitulo para usar?")
-    #sub1File = askopenfilename()
-    #print("Que es el segundo archivo de subtitulos para usar?")
-    #sub2File = askopenfilename()
-    vidFile = '/home/geoff/captionsLearn/lcdp/S01/La.Casa.de.Papel.S01E04.720p.NF.WEB-DL.x265-HETeam.mkv'
-    sub1File ='/home/geoff/captionsLearn/engLcdpSubtitles/Money.Heist.S01E04.XviD-AFG.srt'
-    sub2File = '/home/geoff/captionsLearn/esLcdpSubtitles/La.casa.de.papel.S01E04.WEBRip.Netflix.srt'
+    print("Bienvenido a aprendeSub. Se te mostrara clips con dialogo, despues te pedira a dar traducciones en ambos linguajes")
+    Tk().withdraw()
+    print("Que archivo de video quieres usar?")
+    vidFile = askopenfilename()
+    print("Que es el primero archivo de subtitulo para usar?")
+    sub1File = askopenfilename()
+    print("Que es el segundo archivo de subtitulos para usar?")
+    sub2File = askopenfilename()
+    
     video = VideoFileClip(vidFile)
     sub1, sub2 =cleanSubs( file_to_subtitles(sub1File) ), cleanSubs( file_to_subtitles(sub2File) )
     master = sync(sub1, sub2)
-    pickle.dump(master, open('saveSubs.p','wb'))
+
     #Empezar logging
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
