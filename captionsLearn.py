@@ -11,8 +11,26 @@ import smtplib, os
 from email.message import EmailMessage
 import datetime
 
+import codecs
+
+def findEncoding(filename):
+    """goes through encodings to find one that will decode filename. Goes
+       with first one that works"""
+
+    encodings = [ 'utf-8', 'latin-1', 'windows-1250', 'windows-1252', 'ascii' ]
+
+    for e in encodings: 
+        try:
+            lines = codecs.open(filename, 'r', encoding= e)
+            lines.readlines()
+            lines.seek(0)
+            break 
+        except UnicodeDecodeError:
+            print('got unicode error with %s , trying different encoding' % e)
+    return e
+
 def file_to_subtitles(filename):
-    """ Converts a srt file into subtitles.
+    """ Coonverts a srt file into subtitles.
 
     The returned list is of the form ``[((ta,tb),'some text'),...]``
     and can be fed to SubtitlesClip.
@@ -20,7 +38,8 @@ def file_to_subtitles(filename):
     Only works for '.srt' format for the moment.
     """
 
-    with open(filename,'r') as f:
+    enc = findEncoding(filename)
+    with open(filename, encoding = enc) as f:
         lines = f.readlines()
 
     times_texts = []
@@ -40,7 +59,7 @@ def file_to_subtitles(filename):
 def cleanSubs(s):
     """get rid of non-dialogue subs"""
     ex=[]
-    paren = re.compile('\\([a-zA-z\\s]+\\)') #find text in parenthss
+    paren = re.compile('\([\w\s,.-]+\\)') #find text in parenthss
     for i,v in enumerate(s):
         m = paren.match(v[1])
         #get rid of all cap subs
@@ -49,84 +68,83 @@ def cleanSubs(s):
         #whole sub is in (), which are usually sound/noise subs
         elif  m and len(m.group()) == len(v[1]):
             ex.append(i)
+
+        #2 lines of parentheses
+         #- (Sighs)
+         #- (Laughing) 
+
         #empty cells
         elif len(v[1]) == 0:
+            ex.append(i)
+        #cell is None
+        elif v[1] == None:
             ex.append(i)
     s = [x for i,x in enumerate(s) if i not in ex]
     return s 
 
 def sync(s1, s2):
 
-    thresh = lambda a,b: abs( (a-b) )
+    thresh = lambda a,b: abs( (a[0]-b[0]) ) + abs( (a[1] - b[1]) )
 
     subs = [s1, s2]
     less, more = sorted(subs, key = lambda x: len(x))
 
-    def entryBF(r):
-        """compare ts entries in other subfile by their difference. 
-        Return index and difference of other subfile closest to r """
-        diffsB = [ ( i, thresh( r[0][0], y[0][0] ) ) for i,y in enumerate(more) ]
+    def minDiff(r):
+        """compute diff between tsB and tsE for r and every entry in other subFile.
+           Add these diffs up and return the index with the smallest value"""
+
+        diffsB = [ ( i, thresh( r[0], y[0] ) ) for i,y in enumerate(more) ]
         diffsB.sort( key = lambda r: r[1] )
-        diffsE = [ ( i, thresh( r[0][1], y[0][1] ) ) for i,y in enumerate(more) ]
-        diffsE.sort( key = lambda r: r[1] )
-        minB = diffsB[0]
-        minE = diffsE[0]
-        
-        return minB, minE
+        minDiff = diffsB[0]
+        return minDiff
 
     master = []
-    for j, x in enumerate(less):
-        #best fit tsB and tsE
-        minB, minE = entryBF(x)
-        #append if both timestamps match or 
-        #try to create entry that creates a match
-        if minB[1] < .5:
-            if minE[1] < .5 and minB[0] == minE[0]:
-                master.append( ( x[0], x[1], more[ minB[0] ][1] ) ) 
-            else:
-                #an edge case occurs when x matches tsB, but matches the 
-                #following subs tsE. By merging the one that matches tsB with 
-                #that of tsE, we can create a match.
-                #assumes the subfile with more entries will be 
-                #combining entries
-                tsB, tsE  = x[0]
-                s1S = x[1]
-                s2S = more[ minB[0] ][1]+'\n' + more[ minB[0]+1 ][1]
-                z = ( [tsB, tsE], s1S, s2S )
-                minB, minE = entryBF(z)
+    for i, x in enumerate(less):
 
-                if minE[1]+minB[1] < 1:
-                    master.append(z)
+        #more[index] is best fit for x
+        index = minDiff(x)[0]
+
+        #build entry
+        tsB = min( less[i][0][0], more[index][0][0] ) 
+        master.append( ([tsB, x[0][1]], x[1], more[index][1]) )
+
     return master
 
+def toFile(s, path1= None, path2 = None):
+    """Save subtitles to file"""
+    if path1 == None: path1 = 'sub1.txt'
+    if path2 == None: path2 = 'sub2.txt'
 
-def toFile(s, dest = None):
     if len(s[0]) == 3: 
-        with open("cEngS1E04.txt", "w") as f:
+        with open(path1, "w") as f:
             for i, item in enumerate(s):
                 f.write( '{}\n'.format(i) )
                 f.write( "{}\n".format(item[0]) )
                 f.write( "{}\n\n".format(item[1]) )
 
-        with open("cEsS1E04.txt","w") as f:
+        with open(path2,"w") as f:
             for i, item in enumerate(s):
                 f.write( '{}\n'.format(i) )
                 f.write( "{}\n".format(item[0]) )
                 f.write( "{}\n\n".format(item[2]) )
 
     elif len(s[0]) == 2:
-        with open(dest, "w") as f:
+        with open(path1, "w") as f:
             for i, item in enumerate(s):
                 f.write( '{}\n'.format(i) )
                 f.write( "{}\n".format(item[0]) )
                 f.write( "{}\n\n".format(item[1]) )
 
     else:
-        print("Don't recognize structure of {}".format(f))
+        print("Don't recognize structure of the file called by toFile")
 
 def syncAccuracy(s1, s2, m):
-    """check the quality of the subtitle sync"""
-    pass
+    """comprobar la calidad de la sincronizacion de subtitulos"""
+    subs = [s1, s2]
+    less, more = sorted(subs, key = lambda x: len(x))
+    if len(less) != len(m):
+        print("There was a problem syncing the subtitles. Email both .srt files to geoffro2888@gmail.com for support")
+        sys.exit(0)
 
 def sendLogs():
 
@@ -197,6 +215,11 @@ def sendLogs():
     mailServer.quit()
     print("mail sent")
 
+def quickCheckSubs(s1, s2, s3):
+    print( 'len(s1)', len(s1), 
+           'len(s2)', len(s2), 
+           'len(s3)', len(s3) )   
+
 if __name__ == "__main__":
     print(30*'-','\n')
 
@@ -209,11 +232,14 @@ if __name__ == "__main__":
     sub1File = askopenfilename()
     print("what's the second subtitle file to use?")
     sub2File = askopenfilename()
+    
 
     video = VideoFileClip(vidFile)
-    sub1, sub2 =cleanSubs( file_to_subtitles(sub1File) ), cleanSubs( file_to_subtitles(sub2File) )
+    sub1 = cleanSubs( file_to_subtitles(sub1File) )
+    sub2 = cleanSubs( file_to_subtitles(sub2File) )
     master = sync(sub1, sub2)
-    
+    syncAccuracy( sub1, sub2, master)
+
     #setup logging
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
